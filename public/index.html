@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebStudio — Browser Broadcasting Studio</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%235b8cff'/><circle cx='50' cy='50' r='16' fill='white'/></svg>" />
+</head>
+<body>
+  <!-- ============ TOP TOOLBAR ============ -->
+  <header class="toolbar">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <span class="brand-name">WebStudio</span>
+      <span class="brand-tag">Broadcasting</span>
+    </div>
+
+    <div class="scene-tabs" id="sceneTabs"></div>
+
+    <div class="toolbar-actions">
+      <div class="stream-stat" id="streamStat" hidden>
+        <span class="live-badge" id="liveBadge">● LIVE</span>
+        <span id="statBitrate">0 kbps</span>
+        <span id="statFps">0 fps</span>
+        <span id="statTime">00:00</span>
+      </div>
+      <div class="rec-timer" id="recTimer" hidden>
+        <span class="rec-dot"></span><span id="recTime">00:00</span>
+      </div>
+      <button class="btn" id="btnScreenshot" title="현재 화면 캡처">
+        <svg viewBox="0 0 24 24"><path d="M4 7h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="13" r="3.2"/></svg>
+        캡처
+      </button>
+      <button class="btn btn-rec" id="btnRecord">
+        <span class="rec-square"></span> 녹화 시작
+      </button>
+      <button class="btn btn-primary" id="btnStream">
+        <svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 14 0"/><path d="M8 12a4 4 0 0 1 8 0"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>
+        방송 시작
+      </button>
+    </div>
+  </header>
+
+  <!-- ============ MAIN GRID ============ -->
+  <main class="workspace">
+    <!-- LEFT DOCK -->
+    <aside class="dock dock-left">
+      <section class="panel" id="scenesPanel">
+        <div class="panel-head">
+          <h3>장면 <span class="count" id="sceneCount">0</span></h3>
+          <button class="icon-btn" id="btnAddScene" title="장면 추가">+</button>
+        </div>
+        <ul class="list" id="sceneList"></ul>
+      </section>
+
+      <section class="panel grow" id="sourcesPanel">
+        <div class="panel-head">
+          <h3>소스</h3>
+          <button class="icon-btn" id="btnAddSource" title="소스 추가">+</button>
+        </div>
+        <ul class="list layers" id="sourceList"></ul>
+        <div class="empty-hint" id="sourceEmpty">
+          <p>소스가 없습니다.</p>
+          <button class="btn btn-block" id="btnAddSourceEmpty">+ 소스 추가</button>
+        </div>
+      </section>
+    </aside>
+
+    <!-- CENTER -->
+    <section class="stage">
+      <div class="preview-wrap" id="previewWrap">
+        <div class="canvas-frame" id="canvasFrame">
+          <canvas id="preview" width="1280" height="720"></canvas>
+          <div class="overlay-layer" id="overlayLayer"></div>
+          <div class="selection" id="selection" hidden>
+            <div class="handle" data-h="nw"></div>
+            <div class="handle" data-h="ne"></div>
+            <div class="handle" data-h="sw"></div>
+            <div class="handle" data-h="se"></div>
+            <div class="handle e" data-h="n"></div>
+            <div class="handle e" data-h="s"></div>
+            <div class="handle e" data-h="w"></div>
+            <div class="handle e" data-h="e"></div>
+          </div>
+        </div>
+      </div>
+      <div class="stage-bar">
+        <div class="canvas-info"><span id="resInfo">1280×720</span> · <span id="fpsInfo">0 fps</span></div>
+        <div class="zoom-info" id="fitInfo">화면 맞춤</div>
+      </div>
+    </section>
+
+    <!-- RIGHT INSPECTOR -->
+    <aside class="dock dock-right">
+      <section class="panel grow" id="inspectorPanel">
+        <div class="panel-head"><h3>속성</h3></div>
+        <div class="inspector" id="inspector">
+          <div class="empty-hint"><p>소스를 선택하세요.</p></div>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <!-- ============ BOTTOM: AUDIO MIXER ============ -->
+  <footer class="mixer">
+    <div class="mixer-head"><h3>오디오 믹서</h3></div>
+    <div class="mixer-tracks" id="mixerTracks">
+      <div class="empty-hint inline"><p>오디오 소스가 없습니다.</p></div>
+    </div>
+    <div class="status-bar">
+      <span class="status-item" id="statusScene">장면: —</span>
+      <span class="status-item" id="statusSources">소스 0</span>
+      <span class="status-item status-live" id="statusLive" hidden>● LIVE</span>
+      <span class="status-spacer"></span>
+      <span class="status-item muted">WebStudio · Module 1 (Core Studio)</span>
+    </div>
+  </footer>
+
+  <!-- ============ ADD SOURCE MENU ============ -->
+  <div class="modal-backdrop" id="sourceMenuBackdrop" hidden>
+    <div class="source-menu" id="sourceMenu">
+      <div class="source-menu-head">
+        <h3>소스 추가</h3>
+        <button class="icon-btn" id="closeSourceMenu">✕</button>
+      </div>
+      <div class="source-grid">
+        <button class="source-card" data-type="display"><span class="sc-ico">🖥️</span>화면 캡처</button>
+        <button class="source-card" data-type="camera"><span class="sc-ico">📷</span>웹캠</button>
+        <button class="source-card" data-type="audio"><span class="sc-ico">🎙️</span>오디오 입력</button>
+        <button class="source-card" data-type="image"><span class="sc-ico">🖼️</span>이미지</button>
+        <button class="source-card" data-type="video"><span class="sc-ico">🎬</span>비디오</button>
+        <button class="source-card" data-type="text"><span class="sc-ico">🔤</span>텍스트</button>
+        <button class="source-card" data-type="color"><span class="sc-ico">🎨</span>색상 / 도형</button>
+        <button class="source-card" data-type="browser"><span class="sc-ico">🌐</span>브라우저 소스</button>
+      </div>
+      <p class="source-menu-note">웹캠·화면·마이크는 브라우저 권한 요청이 표시됩니다.</p>
+    </div>
+  </div>
+
+  <!-- ============ STREAM SETTINGS MODAL ============ -->
+  <div class="modal-backdrop" id="streamModalBackdrop" hidden>
+    <div class="source-menu stream-modal" id="streamModal">
+      <div class="source-menu-head">
+        <h3>방송 송출 설정</h3>
+        <button class="icon-btn" id="closeStreamModal">✕</button>
+      </div>
+      <div class="stream-form">
+        <div class="field">
+          <label>플랫폼</label>
+          <div class="platform-row" id="platformRow">
+            <button class="chip on" data-preset="twitch">Twitch</button>
+            <button class="chip" data-preset="youtube">YouTube</button>
+            <button class="chip" data-preset="kick">Kick</button>
+            <button class="chip" data-preset="custom">직접 입력</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>서버 (RTMP URL)</label>
+          <input class="inp" type="text" id="streamUrl" value="rtmp://live.twitch.tv/app/" />
+        </div>
+        <div class="field">
+          <label>스트림 키 <span class="key-hint">· 브라우저에만 저장, 화면엔 마스킹</span></label>
+          <div class="key-wrap">
+            <input class="inp" type="password" id="streamKey" placeholder="스트림 키를 붙여넣기" autocomplete="off" />
+            <button class="mini-btn" id="toggleKey" type="button">👁</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field"><label>영상 비트레이트 (kbps)</label>
+            <select class="inp" id="vBitrate">
+              <option value="2500">2500 (720p)</option>
+              <option value="4500" selected>4500 (1080p)</option>
+              <option value="6000">6000 (1080p60)</option>
+              <option value="9000">9000 (고화질)</option>
+            </select></div>
+          <div class="field"><label>프레임레이트</label>
+            <select class="inp" id="streamFps">
+              <option value="30" selected>30 fps</option>
+              <option value="60">60 fps</option>
+            </select></div>
+        </div>
+      </div>
+      <div class="stream-actions">
+        <button class="btn" id="cancelStream">취소</button>
+        <button class="btn btn-primary" id="startStreamBtn">방송 시작</button>
+      </div>
+      <p class="source-menu-note">브라우저는 RTMP를 직접 보낼 수 없어, 로컬 서버의 ffmpeg가 중계합니다. 스트림 키는 서버로만 전송되며 로그·화면에 노출되지 않습니다.</p>
+    </div>
+  </div>
+
+  <input type="file" id="fileInput" hidden />
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

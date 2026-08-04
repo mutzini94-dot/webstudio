@@ -8,3 +8,10 @@ server-healthcheck-log.html
 extract_pdf.js
 extract_pdf2.mjs
 *.pdf
+
+# backend + Node manifest — keep them out so Vercel deploys a pure static site
+# (prevents Node/serverless auto-detection). The backend runs elsewhere.
+package.json
+package-lock.json
+server.js
+stream-relay.js

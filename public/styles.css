@@ -22,7 +22,7 @@
   --radius-sm: 7px;
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
   --toolbar-h: 52px;
-  --mixer-h: 244px;
+  --mixer-h: 262px;
   --dock-w: 264px;
   font-synthesis: none;
 }
@@ -218,7 +218,7 @@ input[type="color"].inp { padding: 3px; height: 30px; cursor: pointer; }
 .track-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .track-db { font-size: 12px; color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
 
-.track-body { display: flex; gap: 10px; height: 118px; padding: 2px 0 4px; }
+.track-body { display: flex; gap: 10px; height: 100px; padding: 2px 0 4px; }
 /* vertical fader */
 .fader { -webkit-appearance: slider-vertical; appearance: slider-vertical; writing-mode: vertical-lr; direction: rtl;
   width: 20px; height: 100%; margin: 0; accent-color: var(--accent); cursor: pointer; }

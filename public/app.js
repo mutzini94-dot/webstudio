@@ -253,25 +253,36 @@
     r._mediaNode = node; rt.set(src.id, r);
     wireAudio(src, node, true); // monitor video/media playback through speakers
   }
-  function wireAudio(src, node, monitor) {
+  function wireAudio(src, node, defaultMonitor) {
     const r = rt.get(src.id) || {};
     const gain = audioCtx.createGain();
     gain.gain.value = src.muted ? 0 : (src.volume ?? 1);
     const analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 512;
+    analyser.fftSize = 1024;
     node.connect(gain);
     gain.connect(analyser);
     gain.connect(mixDest);
-    if (monitor) gain.connect(audioCtx.destination);
-    r.gain = gain; r.analyser = analyser; r.meterData = new Uint8Array(analyser.frequencyBinCount);
-    r.hasAudio = true; r.monitor = monitor;
+    r.gain = gain; r.analyser = analyser; r.meterData = new Uint8Array(analyser.fftSize);
+    r.hasAudio = true; r.monitorConnected = false; r.peak = 0;
     if (src.volume == null) src.volume = 1;
+    if (src.monitor == null) src.monitor = !!defaultMonitor;
     rt.set(src.id, r);
+    setMonitor(src, src.monitor);
+  }
+  function setMonitor(src, on) {
+    const r = rt.get(src.id);
+    if (!r || !r.gain) return;
+    src.monitor = on;
+    try {
+      if (on && !r.monitorConnected) { r.gain.connect(audioCtx.destination); r.monitorConnected = true; }
+      else if (!on && r.monitorConnected) { r.gain.disconnect(audioCtx.destination); r.monitorConnected = false; }
+    } catch (e) {}
   }
   function applyGain(src) {
     const r = rt.get(src.id);
     if (r && r.gain) r.gain.gain.value = src.muted ? 0 : (src.volume ?? 1);
   }
+  const volToDb = (v) => (v <= 0.001 ? '-∞' : (20 * Math.log10(v)).toFixed(1));
 
   // ============================================================
   //  RENDER LOOP (compositing + meters + fps)
@@ -437,11 +448,15 @@
       let sum = 0;
       for (let i = 0; i < r.meterData.length; i++) { const v = (r.meterData[i] - 128) / 128; sum += v * v; }
       const rms = Math.sqrt(sum / r.meterData.length);
-      const level = s.muted ? 0 : clamp(rms * 2.2, 0, 1);
-      const fill = document.querySelector(`.meter-fill[data-src="${s.id}"]`);
-      if (fill) fill.style.width = (level * 100).toFixed(1) + '%';
-      const db = document.querySelector(`.track-db[data-src="${s.id}"]`);
-      if (db) db.textContent = level <= 0.001 ? '-∞ dB' : (20 * Math.log10(level)).toFixed(0) + ' dB';
+      const amp = s.muted ? 0 : rms;
+      // dB-scaled fill height (-60..0 dB -> 0..100%) matching the scale labels
+      const db = amp <= 0.0001 ? -60 : Math.max(-60, Math.min(0, 20 * Math.log10(amp)));
+      const pct = (db + 60) / 60 * 100;
+      r.peak = Math.max(pct, (r.peak || 0) - 1.2); // peak hold with decay
+      const fill = document.querySelector(`.vmeter-fill[data-src="${s.id}"]`);
+      if (fill) fill.style.height = pct.toFixed(1) + '%';
+      const cap = document.querySelector(`.vmeter-cap[data-src="${s.id}"]`);
+      if (cap) cap.style.bottom = Math.max(0, r.peak).toFixed(1) + '%';
     }
   }
 
@@ -856,24 +871,45 @@
     const audioSources = sources().filter((s) => { const r = rt.get(s.id); return r && r.hasAudio; });
     if (!audioSources.length) { el.innerHTML = '<div class="empty-hint inline"><p>오디오 소스가 없습니다. 마이크·비디오·화면 오디오를 추가하세요.</p></div>'; return; }
     el.innerHTML = '';
+    const scale = [0, -6, -12, -18, -24, -30, -36, -42, -48, -54, -60];
     for (const s of audioSources) {
       const vol = s.volume ?? 1;
+      const global = (s.type === 'audio' || s.type === 'display');
       const t = document.createElement('div');
       t.className = 'track';
       t.innerHTML = `
-        <div class="track-top">
+        <div class="track-head">
+          <span class="track-badge ${global ? '' : 'live'}">${global ? '전역' : '활성'}</span>
           <span class="track-name">${TYPE_META[s.type].icon} ${escapeHtml(s.name)}</span>
-          <span class="track-db" data-src="${s.id}">-∞ dB</span>
         </div>
-        <div class="meter"><div class="meter-fill" data-src="${s.id}"></div></div>
-        <div class="track-ctrl">
-          <input type="range" min="0" max="1.5" step="0.01" value="${vol}" data-vol="${s.id}">
-          <button class="mini-btn mute ${s.muted?'on':''}" data-mute="${s.id}">M</button>
+        <div class="track-db" data-src="${s.id}">${volToDb(vol)} dB</div>
+        <div class="track-body">
+          <input type="range" class="fader" min="0" max="1" step="0.01" value="${vol}" data-vol="${s.id}" title="볼륨">
+          <div class="vmeter-wrap">
+            <div class="vmeter"><div class="vmeter-fill" data-src="${s.id}"></div><div class="vmeter-cap" data-src="${s.id}"></div></div>
+            <div class="vscale">${scale.map((n) => `<span>${n}</span>`).join('')}</div>
+          </div>
+        </div>
+        <div class="track-foot">
+          <button class="tbtn mute ${s.muted ? 'on' : ''}" data-mute="${s.id}" title="음소거">${s.muted ? icoMuteOff() : icoSpeaker()}</button>
+          <button class="tbtn monitor ${s.monitor ? 'on' : ''}" data-monitor="${s.id}" title="모니터링(헤드폰)">${icoHeadphone()}</button>
         </div>`;
       el.appendChild(t);
     }
-    el.querySelectorAll('[data-vol]').forEach((r) => r.oninput = () => { const s = findSource(r.dataset.vol); s.volume = parseFloat(r.value); applyGain(s); save(); });
-    el.querySelectorAll('[data-mute]').forEach((b) => b.onclick = () => { const s = findSource(b.dataset.mute); s.muted = !s.muted; b.classList.toggle('on', s.muted); applyGain(s); save(); });
+    el.querySelectorAll('[data-vol]').forEach((r) => r.oninput = () => {
+      const s = findSource(r.dataset.vol); s.volume = parseFloat(r.value); applyGain(s);
+      const db = el.querySelector(`.track-db[data-src="${s.id}"]`); if (db) db.textContent = volToDb(s.volume) + ' dB';
+      save();
+    });
+    el.querySelectorAll('[data-mute]').forEach((b) => b.onclick = () => {
+      const s = findSource(b.dataset.mute); s.muted = !s.muted;
+      b.classList.toggle('on', s.muted); b.innerHTML = s.muted ? icoMuteOff() : icoSpeaker();
+      applyGain(s); save();
+    });
+    el.querySelectorAll('[data-monitor]').forEach((b) => b.onclick = () => {
+      const s = findSource(b.dataset.monitor); setMonitor(s, !s.monitor);
+      b.classList.toggle('on', s.monitor); save();
+    });
   }
 
   function renderStatus() {
@@ -1183,6 +1219,9 @@
   const eyeOff = () => '<svg viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M10.6 6.1A9.7 9.7 0 0 1 12 6c6.5 0 10 6 10 6a17 17 0 0 1-3 3.6M6.3 6.3A17 17 0 0 0 2 12s3.5 7 10 7a9.7 9.7 0 0 0 3.6-.7"/></svg>';
   const lock = () => '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
   const liveIcon = () => '<svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 14 0"/><path d="M8 12a4 4 0 0 1 8 0"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/></svg>';
+  const icoSpeaker = () => '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16.5 9a3.5 3.5 0 0 1 0 6"/></svg>';
+  const icoMuteOff = () => '<svg viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M22 9l-5 6M17 9l5 6"/></svg>';
+  const icoHeadphone = () => '<svg viewBox="0 0 24 24"><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><rect x="3" y="14" width="4.5" height="6" rx="1.4"/><rect x="16.5" y="14" width="4.5" height="6" rx="1.4"/></svg>';
 
   // ============================================================
   //  WIRING

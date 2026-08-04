@@ -471,14 +471,39 @@
     }
     overlayLayer.querySelectorAll('iframe').forEach((f) => { if (!seen.has(f.dataset.src)) f.remove(); });
 
-    // selection box
+    // selection box + distance guides
     const s = findSource(selectedId);
-    if (!s || dragState) { if (!dragState) selectionEl.hidden = true; return; }
+    const guides = $('guides');
+    if (!s || TYPE_META[s.type].noVisual) { selectionEl.hidden = true; if (guides) guides.hidden = true; return; }
     selectionEl.hidden = false;
     selectionEl.style.left = s.x * sc + 'px';
     selectionEl.style.top = s.y * sc + 'px';
     selectionEl.style.width = s.w * sc + 'px';
     selectionEl.style.height = s.h * sc + 'px';
+    positionGuides(s, sc, guides);
+  }
+
+  function positionGuides(s, sc, guides) {
+    if (!guides) return;
+    guides.hidden = false;
+    const cw = CW * sc, ch = CH * sc;
+    const L = s.x * sc, R = (s.x + s.w) * sc, T = s.y * sc, B = (s.y + s.h) * sc;
+    const hc = (L + R) / 2, vc = (T + B) / 2;
+    // gaps in canvas pixels
+    const gap = { left: Math.round(s.x), right: Math.round(CW - (s.x + s.w)), top: Math.round(s.y), bottom: Math.round(CH - (s.y + s.h)) };
+    const line = (g) => guides.querySelector(`.gl[data-g="${g}"]`);
+    const lab = (g) => guides.querySelector(`.glabel[data-g="${g}"]`);
+    const setLine = (g, css) => Object.assign(line(g).style, css);
+    const setLab = (g, x, y) => { const e = lab(g); e.textContent = gap[g] + ' px'; e.style.left = x + 'px'; e.style.top = y + 'px'; };
+
+    setLine('left', { left: '0px', top: vc + 'px', width: L + 'px', height: '' });
+    setLab('left', L / 2, vc);
+    setLine('right', { left: R + 'px', top: vc + 'px', width: (cw - R) + 'px', height: '' });
+    setLab('right', R + (cw - R) / 2, vc);
+    setLine('top', { left: hc + 'px', top: '0px', height: T + 'px', width: '' });
+    setLab('top', hc, T / 2);
+    setLine('bottom', { left: hc + 'px', top: B + 'px', height: (ch - B) + 'px', width: '' });
+    setLab('bottom', hc, B + (ch - B) / 2);
   }
 
   // ============================================================

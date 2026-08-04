@@ -156,6 +156,16 @@ h3 { font-size: 12px; font-weight: 600; letter-spacing: 0.02em; color: var(--tex
 .overlay-layer { position: absolute; inset: 0; pointer-events: none; }
 .overlay-layer iframe { position: absolute; border: 0; }
 
+/* distance guides (source edge -> canvas edge), like Figma. DOM overlay only,
+   so they are never captured into the recording/stream. */
+.guides { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+.guides .gl { position: absolute; background: #ff3b3b; box-shadow: 0 0 0 0.5px rgba(255,59,59,.4); }
+.guides .gl-h { height: 1px; }
+.guides .gl-v { width: 1px; }
+.guides .glabel { position: absolute; transform: translate(-50%, -50%); font-size: 12px; font-weight: 700;
+  color: #fff; white-space: nowrap; padding: 1px 5px; border-radius: 4px; background: rgba(10,12,18,.82);
+  font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+
 .selection { position: absolute; border: 1.5px solid var(--accent); pointer-events: none; z-index: 5; }
 .handle { position: absolute; width: 10px; height: 10px; background: #fff; border: 1.5px solid var(--accent);
   border-radius: 2px; pointer-events: auto; }

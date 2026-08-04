@@ -203,12 +203,37 @@
       const w = Math.round(v.videoWidth * scale), h = Math.round(v.videoHeight * scale);
       const src = baseSource('video', file.name.replace(/\.[^.]+$/, ''),
         { x: (CW - w) / 2 | 0, y: (CH - h) / 2 | 0, w, h });
-      src.loop = true; src.playing = true;
+      Object.assign(src, mediaDefaults(), { playing: true, fileName: file.name });
       rt.set(src.id, { videoEl: v });
       v.play().catch(() => {});
       setupElementAudio(src, v);
+      applyMediaProps(src);
       commitNew(src);
     };
+  }
+
+  // default OBS-style media-source options
+  function mediaDefaults() {
+    return { loop: true, restartOnActive: true, hwDecode: false, hideWhenEnded: false, closeWhenInactive: false, speed: 100 };
+  }
+  // apply loop / speed / end-behavior to the runtime video element
+  function applyMediaProps(s) {
+    const r = rt.get(s.id); if (!r || !r.videoEl) return;
+    const v = r.videoEl;
+    v.loop = !!s.loop;
+    v.playbackRate = Math.min(4, Math.max(0.1, (s.speed || 100) / 100));
+    v.onended = () => { if (!s.loop && s.hideWhenEnded) { s.visible = false; renderSourceList(); if (selectedId === s.id) renderInspector(); save(); } };
+  }
+  // handle a source becoming visible/hidden (restart / close-when-inactive)
+  function applyActivation(s) {
+    const r = rt.get(s.id); if (!r || !r.videoEl || s.type !== 'video') return;
+    const v = r.videoEl;
+    if (s.visible) {
+      if (s.restartOnActive) { try { v.currentTime = 0; } catch (e) {} }
+      if (s.playing !== false) v.play().catch(() => {});
+    } else if (s.closeWhenInactive) {
+      v.pause();
+    }
   }
 
   // ----- reconnect a persisted media source -----
@@ -226,7 +251,7 @@
         pickFile('video/*', (file) => {
           const v = document.createElement('video');
           v.src = URL.createObjectURL(file); v.loop = !!src.loop; v.playsInline = true;
-          v.onloadedmetadata = () => { rt.set(src.id, { videoEl: v }); if (src.playing !== false) v.play().catch(()=>{}); setupElementAudio(src, v); src.needsReconnect = false; renderAll(); save(); };
+          v.onloadedmetadata = () => { rt.set(src.id, { videoEl: v }); if (src.speed == null) Object.assign(src, mediaDefaults()); src.fileName = file.name; if (src.playing !== false) v.play().catch(()=>{}); setupElementAudio(src, v); applyMediaProps(src); src.needsReconnect = false; renderAll(); save(); };
         });
       }
     } catch (e) { toast(captureError(src.type, e), true); }
@@ -649,7 +674,7 @@
         `<span class="li-ico">${TYPE_META[s.type].icon}</span>` +
         `<span class="li-name">${escapeHtml(s.name)}</span>` +
         `<button class="li-toggle" title="${s.locked ? '잠금 해제' : '잠금'}">${s.locked ? lock() : ''}</button>`;
-      li.querySelector('.li-toggle').onclick = (e) => { e.stopPropagation(); s.visible = !s.visible; renderSourceList(); renderInspector(); save(); };
+      li.querySelector('.li-toggle').onclick = (e) => { e.stopPropagation(); s.visible = !s.visible; applyActivation(s); renderSourceList(); renderInspector(); save(); };
       const lockBtn = li.querySelectorAll('.li-toggle')[1];
       lockBtn.onclick = (e) => { e.stopPropagation(); s.locked = !s.locked; renderSourceList(); renderInspector(); save(); };
       li.onclick = () => select(s.id);
@@ -756,6 +781,8 @@
         <button class="chip ${s.playing!==false?'on':''}" data-act="toggle-play">${s.playing!==false?'⏸ 일시정지':'▶ 재생'}</button>
         <button class="chip ${s.loop?'on':''}" data-toggle="loop">반복 ${s.loop?'켜짐':'꺼짐'}</button>
       </div>
+      <button class="btn btn-block btn-primary" data-act="media-props">⚙ 미디어 속성</button>
+      <div style="height:8px"></div>
       <button class="btn btn-block" data-act="replace-video">🎬 비디오 파일 교체</button>`;
     }
 
@@ -793,7 +820,7 @@
       inp.addEventListener('input', handler);
       inp.addEventListener('change', handler);
     });
-    el.querySelectorAll('[data-toggle]').forEach((b) => b.onclick = () => { const k=b.dataset.toggle; s[k]=!s[k]; renderInspector(); renderSourceList(); if(k==='visible'){} save(); });
+    el.querySelectorAll('[data-toggle]').forEach((b) => b.onclick = () => { const k=b.dataset.toggle; s[k]=!s[k]; if(k==='visible') applyActivation(s); if(k==='loop') applyMediaProps(s); renderInspector(); renderSourceList(); save(); });
     el.querySelectorAll('[data-set-align]').forEach((b) => b.onclick = () => { s.align=b.dataset.setAlign; renderInspector(); save(); });
     el.querySelectorAll('[data-set-shape]').forEach((b) => b.onclick = () => { s.shape=b.dataset.setShape; renderInspector(); save(); });
     el.querySelectorAll('[data-act]').forEach((b) => b.onclick = () => inspectorAction(b.dataset.act, s));
@@ -807,6 +834,7 @@
     else if (act === 'replace-image') replaceImage(s);
     else if (act === 'replace-video') replaceVideo(s);
     else if (act === 'recapture') recaptureDevice(s);
+    else if (act === 'media-props') openMediaProps(s);
   }
 
   // ----- edit content of existing sources -----
@@ -835,8 +863,11 @@
         const r = rt.get(s.id) || {};
         r.videoEl = v; r._mediaNode = null; // allow re-wiring audio for the new element
         rt.set(s.id, r);
+        if (s.speed == null) Object.assign(s, mediaDefaults());
+        s.fileName = file.name;
         if (s.playing !== false) v.play().catch(() => {});
         setupElementAudio(s, v);
+        applyMediaProps(s);
         s.needsReconnect = false;
         toast('비디오를 교체했습니다.');
         renderInspector(); renderMixer(); save();
@@ -853,6 +884,45 @@
       toast('장치를 다시 선택했습니다.');
       renderInspector();
     } catch (e) { toast(captureError(s.type, e), true); }
+  }
+
+  // ----- media source properties modal (OBS-style) -----
+  const MP_FIELDS = ['loop', 'restartOnActive', 'hwDecode', 'hideWhenEnded', 'closeWhenInactive', 'speed'];
+  let mpSource = null, mpSnapshot = null;
+
+  function openMediaProps(s) {
+    if (s.type !== 'video') return;
+    if (s.speed == null) Object.assign(s, mediaDefaults());
+    mpSource = s;
+    mpSnapshot = {}; MP_FIELDS.forEach((k) => (mpSnapshot[k] = s[k]));
+    $('mpTitle').textContent = s.name;
+    $('mpPath').value = s.fileName || (s.needsReconnect ? '(미디어 다시 연결 필요)' : s.name);
+    $('mpLoop').checked = !!s.loop;
+    $('mpRestart').checked = !!s.restartOnActive;
+    $('mpHw').checked = !!s.hwDecode;
+    $('mpHideEnd').checked = !!s.hideWhenEnded;
+    $('mpCloseInactive').checked = !!s.closeWhenInactive;
+    $('mpSpeed').value = s.speed; $('mpSpeedNum').value = s.speed;
+    // live preview reusing the source's blob URL
+    const r = rt.get(s.id);
+    const prev = $('mpPreview');
+    if (r && r.videoEl && r.videoEl.currentSrc) { prev.src = r.videoEl.currentSrc; prev.play().catch(() => {}); }
+    else { prev.removeAttribute('src'); prev.load(); }
+    $('mediaPropsBackdrop').hidden = false;
+  }
+
+  function closeMediaProps() { const p = $('mpPreview'); p.pause(); p.removeAttribute('src'); p.load(); $('mediaPropsBackdrop').hidden = true; mpSource = null; }
+
+  function mpApply() {
+    const s = mpSource; if (!s) return;
+    s.loop = $('mpLoop').checked;
+    s.restartOnActive = $('mpRestart').checked;
+    s.hwDecode = $('mpHw').checked;
+    s.hideWhenEnded = $('mpHideEnd').checked;
+    s.closeWhenInactive = $('mpCloseInactive').checked;
+    s.speed = clamp(parseInt($('mpSpeedNum').value) || 100, 25, 200);
+    applyMediaProps(s);
+    renderInspector();
   }
 
   function syncInspectorFields(s) {
@@ -1243,6 +1313,18 @@
   document.querySelectorAll('#platformRow .chip').forEach((c) => c.onclick = () => selectPreset(c.dataset.preset));
   $('toggleKey').onclick = () => { const k = $('streamKey'); k.type = k.type === 'password' ? 'text' : 'password'; };
   $('streamKey').addEventListener('keydown', (e) => { if (e.key === 'Enter') beginStreamFromModal(); });
+
+  // media properties modal wiring
+  ['mpLoop', 'mpRestart', 'mpHw', 'mpHideEnd', 'mpCloseInactive'].forEach((id) => $(id).addEventListener('change', mpApply));
+  $('mpSpeed').addEventListener('input', () => { $('mpSpeedNum').value = $('mpSpeed').value; mpApply(); });
+  $('mpSpeedNum').addEventListener('input', () => { $('mpSpeed').value = $('mpSpeedNum').value; mpApply(); });
+  $('mpBrowse').onclick = () => { if (mpSource) { const s = mpSource; closeMediaProps(); replaceVideo(s); } };
+  $('mpDefaults').onclick = () => { if (!mpSource) return; Object.assign(mpSource, mediaDefaults()); openMediaProps(mpSource); };
+  $('mpOk').onclick = () => { mpApply(); save(); closeMediaProps(); };
+  $('mpCancel').onclick = () => { if (mpSource && mpSnapshot) { Object.assign(mpSource, mpSnapshot); applyMediaProps(mpSource); renderInspector(); } closeMediaProps(); };
+  $('closeMediaProps').onclick = $('mpCancel').onclick;
+  $('mediaPropsBackdrop').onclick = (e) => { if (e.target.id === 'mediaPropsBackdrop') $('mpCancel').onclick(); };
+
   window.addEventListener('beforeunload', save);
 
   // ---------- boot ----------

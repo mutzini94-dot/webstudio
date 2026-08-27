@@ -39,7 +39,7 @@ erDiagram
 
     DONOR {
         bigint donor_id PK
-        string user_id UQ
+        string user_id UK
         string nickname
         string status
         timestamp created_at
@@ -47,7 +47,7 @@ erDiagram
 
     RECEIVER {
         bigint receiver_id PK
-        string user_id UQ
+        string user_id UK
         string nickname
         string status
         timestamp created_at
@@ -55,7 +55,7 @@ erDiagram
 
     DONOR_WALLET {
         bigint wallet_id PK
-        bigint donor_id FK,UQ
+        bigint donor_id FK,UK
         decimal balance
         bigint version
         timestamp updated_at
@@ -63,7 +63,7 @@ erDiagram
 
     RECEIVER_WALLET {
         bigint wallet_id PK
-        bigint receiver_id FK,UQ
+        bigint receiver_id FK,UK
         decimal balance
         bigint version
         timestamp updated_at
@@ -71,7 +71,7 @@ erDiagram
 
     PAYMENT_METHOD {
         bigint payment_method_id PK
-        string method_code UQ
+        string method_code UK
         string method_name
         string method_type
         string status
@@ -131,7 +131,7 @@ erDiagram
         timestamp accepted_at
         timestamp completed_at
         timestamp canceled_at
-        string idempotency_key UQ
+        string idempotency_key UK
         timestamp created_at
     }
 
@@ -186,7 +186,7 @@ erDiagram
 
     ACCOUNT {
         bigint account_id PK
-        string account_code UQ
+        string account_code UK
         string account_name
         string account_type
         bigint parent_account_id FK
